@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accounting (0452) - Grade Distribution</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .bar { transition: opacity 0.3s; }
+        .bar:hover { opacity: 0.8; }
+        .axis-label { font-size: 12px; }
+        .legend { font-size: 10px; }
+        .tooltip {
+            position: absolute;
+            background: white;
+            border: 1px solid #ddd;
+            padding: 8px;
+            font-size: 12px;
+            display: none;
+        }
+        #component-toggles { margin-top: 10px; font-size: 12px; }
+        #component-toggles label { margin-right: 12px; }
+    </style>
+</head>
+<body>
+    <h2>Accounting (0452) - Grade Distribution</h2>
+    <div id="chart-container"></div>
+    <div id="component-toggles"></div>
+    <div class="tooltip"></div>
+    <script>
+    const data = [
+        {grade: "A*", "Component 12": 0, "Component 22": 0, "Final Marks": 9},
+        {grade: "A", "Component 12": 17, "Component 22": 17, "Final Marks": 8},
+        {grade: "B", "Component 12": 17, "Component 22": 4, "Final Marks": 7},
+        {grade: "C", "Component 12": 6, "Component 22": 5, "Final Marks": 4},
+        {grade: "D", "Component 12": 2, "Component 22": 3, "Final Marks": 3},
+        {grade: "E", "Component 12": 4, "Component 22": 2, "Final Marks": 1},
+        {grade: "F", "Component 12": 0, "Component 22": 1, "Final Marks": 1},
+        {grade: "G", "Component 12": 1, "Component 22": 1, "Final Marks": 2},
+        {grade: "U", "Component 12": 0, "Component 22": 1, "Final Marks": 0}
+    ];
+
+    const components = ['Component 12', 'Component 22', 'Final Marks'];
+    const grades = ['A*', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'U'];
+    const colorScale = d3.scaleOrdinal()
+        .domain(components)
+        .range(['#1f77b4', '#ff7f0e', '#d62728']); // Blue, Orange, Red
+
+    // Set up SVG
+    const margin = {top: 20, right: 150, bottom: 40, left: 50};
+    const width = 600 - margin.left - margin.right;
+    const height = 400 - margin.top - margin.bottom;
+
+    const svg = d3.select("#chart-container")
+        .append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+    // Set up scales
+    const x = d3.scaleBand()
+        .domain(grades)
+        .range([0, width])
+        .padding(0.1);
+
+    const y = d3.scaleLinear()
+        .range([height, 0]);
+
+    // Create axes
+    const xAxis = svg.append("g")
+        .attr("class", "x-axis")
+        .attr("transform", `translate(0,${height})`)
+        .call(d3.axisBottom(x));
+
+    const yAxis = svg.append("g")
+        .attr("class", "y-axis");
+
+    // X-axis label
+    svg.append("text")
+        .attr("class", "x-axis-label")
+        .attr("x", width / 2)
+        .attr("y", height + 30)
+        .attr("text-anchor", "middle")
+        .text("Grade");
+
+    // Y-axis label
+    svg.append("text")
+        .attr("class", "y-axis-label")
+        .attr("transform", "rotate(-90)")
+        .attr("y", -40)
+        .attr("x", -height / 2)
+        .attr("text-anchor", "middle")
+        .text("Number of Students");
+
+    // Create stack generator
+    const stack = d3.stack()
+        .keys(components.slice(0, 2));  // Stack the first 2 components
+
+    // Create legend
+    const legend = svg.append("g")
+        .attr("class", "legend")
+        .attr("transform", `translate(${width + 10}, 0)`);
+
+    legend.selectAll("rect")
+        .data(components)
+        .enter().append("rect")
+        .attr("y", (d, i) => i * 15)
+        .attr("width", 12)
+        .attr("height", 12)
+        .style("fill", d => colorScale(d));
+
+    legend.selectAll("text")
+        .data(components)
+        .enter().append("text")
+        .attr("x", 18)
+        .attr("y", (d, i) => i * 15 + 9)
+        .attr("dy", ".35em")
+        .style("text-anchor", "start")
+        .style("font-size", "10px")
+        .text(d => d);
+
+    // Create component toggles
+    const toggles = d3.select("#component-toggles")
+        .selectAll("input")
+        .data(components)
+        .enter()
+        .append("label")
+        .text(d => d)
+        .append("input")
+        .attr("type", "checkbox")
+        .attr("checked", false)  // Start with all unchecked
+        .on("change", function(event, d) {
+            if (d === "Final Marks") {
+                // If Final Marks is checked, uncheck others
+                if (this.checked) {
+                    toggles.each(function(o) {
+                        if (o !== "Final Marks") {
+                            this.checked = false;
+                        }
+                    });
+                }
+            } else {
+                // If any other component is checked, uncheck Final Marks
+                if (this.checked) {
+                    toggles.each(function(o) {
+                        if (o === "Final Marks") {
+                            this.checked = false;
+                        }
+                    });
+                }
+            }
+            updateChart();
+        });
+
+    function updateChart() {
+        const selectedComponents = components.filter((_, i) => d3.select(toggles.nodes()[i]).property("checked"));
+
+        let chartData;
+        if (selectedComponents.includes('Final Marks')) {
+            // If Final Marks is selected, use it for the chart
+            chartData = data.map(d => ({...d, value: d['Final Marks']}));
+        } else {
+            // Otherwise, use the stacked data of the other components
+            const filteredStack = d3.stack().keys(selectedComponents);
+            chartData = filteredStack(data);
+        }
+
+        const yMax = selectedComponents.includes('Final Marks') ?
+            d3.max(data, d => d['Final Marks']) :
+            d3.max(chartData, d => d3.max(d, d => d[1]));
+
+        y.domain([0, yMax || 1]);  // Use 1 as max if no components are selected
+
+        yAxis.transition().duration(500).call(d3.axisLeft(y));
+
+        if (selectedComponents.includes('Final Marks')) {
+            // Draw bars for Final Marks
+            const bars = svg.selectAll(".bar")
+                .data(chartData);
+
+            bars.enter()
+                .append("rect")
+                .attr("class", "bar")
+                .merge(bars)
+                .transition()
+                .duration(500)
+                .attr("x", d => x(d.grade))
+                .attr("y", d => y(d.value))
+                .attr("height", d => height - y(d.value))
+                .attr("width", x.bandwidth())
+                .style("fill", colorScale('Final Marks'));
+
+            bars.exit().remove();
+
+            // Remove stacked bars
+            svg.selectAll(".stacked-bar").remove();
+        } else {
+            // Remove Final Marks bars
+            svg.selectAll(".bar").remove();
+
+            // Draw stacked bars
+            const stackedBars = svg.selectAll(".stacked-bar")
+                .data(chartData);
+
+            stackedBars.enter()
+                .append("g")
+                .attr("class", "stacked-bar")
+                .merge(stackedBars)
+                .style("fill", d => colorScale(d.key))
+                .selectAll("rect")
+                .data(d => d)
+                .join("rect")
+                .transition()
+                .duration(500)
+                .attr("x", d => x(d.data.grade))
+                .attr("y", d => y(d[1]))
+                .attr("height", d => y(d[0]) - y(d[1]))
+                .attr("width", x.bandwidth());
+
+            stackedBars.exit().remove();
+        }
+
+        // Update tooltip
+        svg.selectAll("rect")
+            .on("mouseover", function(event, d) {
+                let tooltipContent;
+                if (selectedComponents.includes('Final Marks')) {
+                    tooltipContent = `Grade: ${d.grade}<br>Final Marks: ${d.value}`;
+                } else {
+                    const component = d3.select(this.parentNode).datum().key;
+                    const count = d[1] - d[0];
+                    tooltipContent = `Grade: ${d.data.grade}<br>${component}: ${count}`;
+                }
+                d3.select(".tooltip")
+                    .style("display", "block")
+                    .html(tooltipContent)
+                    .style("left", (event.pageX + 10) + "px")
+                    .style("top", (event.pageY - 10) + "px");
+            })
+            .on("mouseout", function() {
+                d3.select(".tooltip").style("display", "none");
+            });
+    }
+
+    // Initial chart update
+    updateChart();
+    </script>
+</body>
+</html>
